@@ -1,9 +1,5 @@
 # MoyuyuPet
 
-> show your earning every second!!!
->
-> 我钱钱呢？？
-
 一个本地优先的 AI 桌宠：感知 Qoder、DeepSeek Harness、Claude Code、Codex 等工具的
 token 消耗与任务状态，用 2D 动画和少量评价气泡给出反馈。
 
