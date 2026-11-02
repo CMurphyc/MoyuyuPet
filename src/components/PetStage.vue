@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ref } from "vue";
+import Live2DPet from "./Live2DPet.vue";
 import PetSprite from "./PetSprite.vue";
 import SpeechBubble from "./SpeechBubble.vue";
 import { usePetActivity } from "../composables/usePetActivity";
@@ -6,6 +8,7 @@ import { useSpeechBubble } from "../composables/useSpeechBubble";
 
 const { state, intensity, paused } = usePetActivity();
 const { message } = useSpeechBubble(() => paused.value);
+const useLive2D = ref(true);
 </script>
 
 <template>
@@ -13,7 +16,14 @@ const { message } = useSpeechBubble(() => paused.value);
     <div class="bubble-slot">
       <SpeechBubble :message="message" />
     </div>
-    <PetSprite :state="state" :intensity="intensity" :paused="paused" />
+    <Live2DPet
+      v-if="useLive2D"
+      :state="state"
+      :intensity="intensity"
+      :paused="paused"
+      @unavailable="useLive2D = false"
+    />
+    <PetSprite v-else :state="state" :intensity="intensity" :paused="paused" />
   </main>
 </template>
 
@@ -35,7 +45,7 @@ const { message } = useSpeechBubble(() => paused.value);
   align-items: flex-end;
   justify-content: center;
   width: 100%;
-  height: 150px;
+  height: 120px;
   margin-bottom: 2px;
 }
 </style>

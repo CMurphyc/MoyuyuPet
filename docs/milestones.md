@@ -15,11 +15,11 @@
 | 项目 | 内容 |
 | --- | --- |
 | 最后更新 | 2026-11-02 |
-| 当前里程碑 | M7.1 完成，待选择下一步 |
+| 当前里程碑 | M7.2 视觉升级完成，待选择下一步 |
 | 当前阶段 | 阶段四：体验增强（进行中） |
 | 基线提交 | `6086a23`（Tauri 骨架 + 文档 + .gitignore） |
-| 工作区 | M7.1 已完成；代码待提交 |
-| 下一步动作 | M6.1 设置增强，或视觉/动画升级 |
+| 工作区 | M7.2 已完成；代码待提交 |
+| 下一步动作 | M6.1 设置增强，或自定义 Live2D 模型/动作 |
 
 ## 2. 推进规则（给后续 session）
 
@@ -68,6 +68,7 @@
 | M6 日常使用 | `DONE` | M1–M5 中已接入的适配器 | 设置、托盘、自启、单实例 | 清单全部通过 |
 | M6.1 设置增强与稳定性 | `TODO` | M6 | 路径/频率设置、日志、清理、soak | 延期的非阻塞项 |
 | M7.1 任务感知气泡 | `DONE` | M2/M3/M6 | 标题提取、模板、隐私开关 | 任务标题实际显示 |
+| M7.2 视觉升级 | `DONE` | M1/M7.1 | 新应用图标、Live2D Tororo、SVG 回退 | 图标与真实 Live2D 渲染通过 |
 | M7 体验增强 | `TODO` | M6 | OTel、本地模型、Live2D、发布 | 按优先级逐项验收 |
 
 M2 与 M3 在 M1 的事件模型稳定后可以并行推进；M4 与 M5 可以并行。
@@ -366,6 +367,37 @@ pnpm tauri dev
 - 设置窗口截图确认标题开关默认开启、隐私说明已更新。
 - 标题默认最多 24 字，可随时关闭。
 
+### M7.2 视觉升级（DONE）
+
+目标：替换默认 Tauri 图标，并接入真实 Live2D 白猫角色。
+
+任务清单：
+
+- [x] 新增与奶油猫形象一致的应用图标源 SVG，并生成全平台 Tauri 图标
+- [x] 接入 `pixi.js` + `pixi-live2d-display/cubism4` + Cubism Core
+- [x] 使用 Live2D 官方 Tororo 白猫模型，映射 idle/working/celebrate/error/sleep
+- [x] working 状态按 intensity 调整 Tap 动作频率
+- [x] sleep 状态停止动作并闭眼
+- [x] 模型缺失/加载失败时自动回退内置 SVG 宠物
+- [x] 模型与 Cubism Core 不提交仓库，提供 `scripts/fetch-live2d.ps1` 本地下载
+- [x] 增加授权说明 `docs/third-party/live2d-tororo.md`
+
+验收标准：
+
+- [x] 应用图标更新为奶油猫图标。
+- [x] Tororo 在实际 Tauri 窗口中渲染成功。
+- [x] Qoder 工作事件触发 Live2D working 动作与任务气泡。
+- [x] 未下载模型时可回退 SVG（代码路径）。
+- [x] 前端构建与 debug 构建通过。
+
+当前验证（2026-11-02）：
+
+- Tororo 白猫在透明宠物窗口中正常渲染。
+- 临时 Qoder 会话触发 working，气泡显示“「给桌宠加 Live2D」看起来不好搞，钱钱先飞了”。
+- 模型文件通过官方免费素材授权下载，保存在本地 `public/live2d/`，未提交仓库。
+
+后续可选：自定义猫 Live2D 模型、点击互动动作、表情切换、Live2D 开关设置。
+
 ### M7 体验增强（TODO）
 
 目标：在不破坏稳定性的前提下增加体验项，按优先级逐项推进。
@@ -443,6 +475,8 @@ cargo test --manifest-path src-tauri/Cargo.toml
 | 2026-11-02 | M4/M5 | TODO → HOLD | - | 按用户指示暂缓 Claude Code 与 Codex 适配 |
 | 2026-11-02 | M7.1 | TODO → IN PROGRESS | - | 开始任务感知气泡 |
 | 2026-11-02 | M7.1 | IN PROGRESS → DONE | - | Qoder/dsh 标题接入、截断、模板与设置开关通过 |
+| 2026-11-02 | M7.2 | TODO → IN PROGRESS | - | 开始图标与 Live2D 视觉升级 |
+| 2026-11-02 | M7.2 | IN PROGRESS → DONE | - | 新图标、Tororo Live2D、工作态与 SVG 回退通过 |
 
 后续 session 完成里程碑时，在本表追加一行，并更新第 1、3 节的状态。
 

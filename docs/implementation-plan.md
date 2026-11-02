@@ -226,6 +226,20 @@ type PetActivity = {
 
 拖动通过 `startDragging`；位置用 `tauri-plugin-window-state` 记忆并在多显示器变化后钳制到可见区域。关闭窗口默认隐藏到托盘，托盘菜单提供真正退出。
 
+### 3.9 Live2D 渲染与回退
+
+- 运行时：`pixi.js@6` + `pixi-live2d-display/cubism4` + Cubism Core。
+- 模型：Live2D 官方 Tororo 白猫（Cubism 3.2 runtime），状态映射：
+  - idle → `Idle`
+  - working → 按 intensity 间隔播放 `Tap`
+  - celebrate → `Flick`
+  - error → `FlickDown`
+  - sleep → 停止动作并闭合双眼参数
+- 资源位置：`public/live2d/tororo/` 与 `public/live2d/core/`，已在 `.gitignore` 中忽略。
+- 下载脚本：`scripts/fetch-live2d.ps1 -AcceptLicense`，需要同意 Live2D 免费素材与 Cubism Core 授权。
+- 回退：模型或 Core 缺失、加载失败时，`PetStage` 自动切换回 `PetSprite.vue` SVG 宠物。
+- 切换模型：保持 `Live2DModel.from(modelUrl)` 的 `model3.json` 入口，替换目录和 URL 即可。
+
 ## 4. 工具接入方案
 
 ### 4.1 Qoder / Qoder CN（P0）
@@ -337,7 +351,7 @@ M3 实现状态（2026-11-02）：
 | --- | --- | --- |
 | 壳 | Tauri 2 | 已有骨架；透明/置顶/托盘/自启生态齐全 |
 | 前端 | Vue 3 + TS | 已确定；组件和状态管理成本低 |
-| 动画 | 精灵图 + Canvas 2D | 首版最轻、可控；Live2D 后置 |
+| 动画 | Live2D（pixi.js + pixi-live2d-display）+ SVG 回退 | 已接入 Tororo 白猫；模型缺失时自动降级 |
 | 采集 | Rust 常驻任务 | 文件/SQLite/zstd 处理不阻塞 UI |
 | SQLite | `rusqlite`（bundled） | 只读访问 Qoder/Codex 数据库 |
 | zstd | `zstd` crate | dsh 会话解压 |
@@ -363,37 +377,37 @@ M3 实现状态（2026-11-02）：
 MoyuyuPet/
 ├─ docs/
 │  ├─ requirements.md
-│  └─ implementation-plan.md
+│  ├─ implementation-plan.md
+│  ├─ milestones.md
+│  └─ third-party/live2d-tororo.md
+├─ scripts/
+│  └─ fetch-live2d.ps1           # 本地下载 Tororo + Cubism Core
+├─ public/live2d/                # 授权素材，gitignored
 ├─ src/                          # Vue 3 + TS
 │  ├─ App.vue
+│  ├─ types.ts
 │  ├─ components/
-│  │  ├─ PetCanvas.vue
-│  │  └─ SpeechBubble.vue
+│  │  ├─ PetStage.vue
+│  │  ├─ Live2DPet.vue
+│  │  ├─ PetSprite.vue
+│  │  ├─ SpeechBubble.vue
+│  │  └─ SettingsView.vue
 │  ├─ composables/
 │  │  ├─ usePetActivity.ts
 │  │  └─ useSpeechBubble.ts
-│  ├─ services/
-│  │  └─ tauriEvents.ts
 │  └─ assets/
-│     ├─ pet/                    # 精灵图与帧配置
 │     └─ bubbles/zh-CN.json
 ├─ src-tauri/
 │  ├─ src/
 │  │  ├─ main.rs
 │  │  ├─ lib.rs
-│  │  ├─ activity/
-│  │  │  ├─ mod.rs               # ActivitySource trait
-│  │  │  ├─ model.rs             # AiEvent / TokenUsage
-│  │  │  ├─ aggregator.rs        # 窗口聚合与速率
-│  │  │  ├─ inbox.rs             # 本地收件箱
-│  │  │  └─ adapters/
-│  │  │     ├─ qoder.rs
-│  │  │     ├─ dsh.rs
-│  │  │     ├─ claude.rs
-│  │  │     └─ codex.rs
-│  │  ├─ settings.rs
-│  │  └─ windows.rs
-│  ├─ tests/fixtures/            # 脱敏样例数据
+│  │  ├─ events.rs
+│  │  ├─ qoder.rs
+│  │  ├─ dsh.rs
+│  │  ├─ commands.rs
+│  │  ├─ interaction.rs
+│  │  └─ preferences.rs
+│  ├─ icons/                     # app-icon.svg + 生成的平台图标
 │  ├─ capabilities/default.json
 │  └─ tauri.conf.json
 ├─ package.json
