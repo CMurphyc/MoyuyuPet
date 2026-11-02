@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { AdapterStatus, AppSettings } from "../types";
 
-const settings = ref<AppSettings>({ paused: false, autostart: false });
+const settings = ref<AppSettings>({ paused: false, autostart: false, include_task: true });
 const statuses = ref<AdapterStatus[]>([]);
 const error = ref<string | null>(null);
 const loading = ref(true);
@@ -67,6 +67,17 @@ async function toggleAutostart() {
   }
 }
 
+async function toggleIncludeTask() {
+  const includeTask = !settings.value.include_task;
+  try {
+    settings.value.include_task = await invoke<boolean>("set_include_task", {
+      includeTask,
+    });
+  } catch (cause) {
+    error.value = String(cause);
+  }
+}
+
 onMounted(async () => {
   await load();
   unlisteners.push(
@@ -112,6 +123,13 @@ onUnmounted(() => {
         </span>
         <span class="switch" :class="{ on: settings.autostart }"><span></span></span>
       </button>
+      <button class="row" :aria-pressed="settings.include_task" @click="toggleIncludeTask">
+        <span class="row-text">
+          <strong>气泡包含任务标题</strong>
+          <small>只截取会话标题，最多 24 字，可随时关闭</small>
+        </span>
+        <span class="switch" :class="{ on: settings.include_task }"><span></span></span>
+      </button>
     </section>
 
     <section class="card">
@@ -133,8 +151,8 @@ onUnmounted(() => {
     <section class="card privacy">
       <h2>隐私</h2>
       <p>
-        只读取本地元数据：Qoder 的 token_info、dsh 的 usage 与 turn 状态。
-        不读取对话正文，不联网，不上传。
+        只读取本地元数据：Qoder 的 token_info 与会话标题、dsh 的 usage、turn 状态与标题。
+        任务标题最多保留 24 字，可在上方关闭。不读取对话正文，不联网，不上传。
       </p>
     </section>
 

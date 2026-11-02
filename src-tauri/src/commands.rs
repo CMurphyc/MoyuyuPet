@@ -2,12 +2,18 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 use tauri_plugin_autostart::ManagerExt;
 
 use crate::events::{AdapterRegistry, AdapterStatus, PetState, SettingsPayload};
+use crate::preferences::Preferences;
 
 #[tauri::command]
-pub fn get_settings(app: AppHandle, state: State<'_, PetState>) -> SettingsPayload {
+pub fn get_settings(
+    app: AppHandle,
+    state: State<'_, PetState>,
+    preferences: State<'_, Preferences>,
+) -> SettingsPayload {
     SettingsPayload {
         paused: state.is_paused(),
         autostart: app.autolaunch().is_enabled().unwrap_or(false),
+        include_task: preferences.include_task(),
     }
 }
 
@@ -26,6 +32,15 @@ pub fn set_autostart(app: AppHandle, enabled: bool) -> Result<bool, String> {
         manager.disable().map_err(|error| error.to_string())?;
     }
     manager.is_enabled().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn set_include_task(
+    preferences: State<'_, Preferences>,
+    include_task: bool,
+) -> Result<bool, String> {
+    preferences.set_include_task(include_task)?;
+    Ok(preferences.include_task())
 }
 
 #[tauri::command]

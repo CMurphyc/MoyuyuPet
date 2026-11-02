@@ -13,6 +13,7 @@ export interface BubblePayload {
   kind: BubbleKind;
   tool?: string | null;
   tokens?: number | null;
+  task?: string | null;
 }
 
 export interface AdapterStatus {
@@ -24,4 +25,5 @@ export interface AdapterStatus {
 export interface AppSettings {
   paused: boolean;
   autostart: boolean;
+  include_task: boolean;
 }

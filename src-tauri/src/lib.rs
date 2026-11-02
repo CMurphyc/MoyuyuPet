@@ -2,6 +2,7 @@ mod commands;
 mod dsh;
 mod events;
 mod interaction;
+mod preferences;
 mod qoder;
 
 use std::time::Duration;
@@ -32,6 +33,7 @@ fn emit_demo(app: &AppHandle, kind: &str) {
                     kind: "idle",
                     tool: None,
                     tokens: None,
+                    task: None,
                 },
             );
             return;
@@ -56,6 +58,7 @@ fn emit_demo(app: &AppHandle, kind: &str) {
                 kind: bubble_kind,
                 tool,
                 tokens,
+                task: None,
             },
         );
     }
@@ -175,6 +178,7 @@ pub fn run() {
             commands::get_settings,
             commands::set_paused,
             commands::set_autostart,
+            commands::set_include_task,
             commands::get_adapter_statuses,
         ])
         .setup(|app| {
@@ -185,6 +189,9 @@ pub fn run() {
                     if let Err(error) = std::fs::create_dir_all(&config_dir) {
                         eprintln!("[app] failed to create config dir: {error}");
                     }
+                    let preferences =
+                        preferences::Preferences::load(config_dir.join("preferences.json"));
+                    let _ = app.manage(preferences);
                     qoder::start(app.handle().clone(), config_dir.clone());
                     dsh::start(app.handle().clone(), config_dir);
                 }

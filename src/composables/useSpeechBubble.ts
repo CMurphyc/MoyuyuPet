@@ -34,6 +34,19 @@ export function useSpeechBubble(isPaused: () => boolean) {
     return template.replace(/\{(\w+)\}/g, (_, key: string) => String(vars[key] ?? ""));
   }
 
+  function pickTemplate(kind: BubbleKind, vars: Record<string, string | number>) {
+    const list = catalogue[kind] ?? [];
+    if (!list.length) return null;
+
+    const hasTask = typeof vars.task === "string" && vars.task.length > 0;
+    const candidates = hasTask
+      ? list.filter((template) => template.includes("{task}"))
+      : list.filter((template) => !template.includes("{task}"));
+    const pool = candidates.length ? candidates : list;
+
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
   function pump() {
     if (message.value || isPaused() || queue.length === 0) return;
 
@@ -57,7 +70,9 @@ export function useSpeechBubble(isPaused: () => boolean) {
     const list = catalogue[kind];
     if (!list?.length) return;
 
-    const raw = list[Math.floor(Math.random() * list.length)];
+    const raw = pickTemplate(kind, vars);
+    if (!raw) return;
+
     const text = render(raw, vars).slice(0, MAX_LENGTH);
     queue.push({ text, priority: priority[kind] });
 
@@ -75,6 +90,7 @@ export function useSpeechBubble(isPaused: () => boolean) {
         enqueue(event.payload.kind, {
           tool: event.payload.tool ?? "AI",
           tokens: event.payload.tokens ?? 0,
+          task: event.payload.task?.trim() ?? "",
         });
       }),
     );

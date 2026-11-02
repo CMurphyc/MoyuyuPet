@@ -174,7 +174,8 @@ type PetActivity = {
 
 - 单气泡、最多 30 个汉字、默认冷却 40 秒。
 - 优先级：错误 > 任务完成 > token 里程碑 > 任务开始 > 闲置闲聊。
-- 输入只允许元数据：工具名、项目名、token 数、耗时、工具调用类型、文件数。
+- 输入只允许元数据：工具名、项目/任务标题、token 数、耗时、工具调用类型、文件数。
+- 任务标题最多保留 24 字，优先选择带 `{task}` 的模板；设置中可关闭标题读取。
 - 模板放在 `src/assets/bubbles/zh-CN.json`，示例：
 
 ```json
@@ -243,7 +244,7 @@ type PetActivity = {
 2. 每 1 秒轮询：`role = 'assistant' AND token_info IS NOT NULL AND token_info <> ''` 且水位之后的新行。
 3. 以 `rowid` 为唯一增量主键，`gmt_create` 仅辅助展示，不参与水位。
 4. 解析 `token_info`，映射为 `TokenUsage`；同一 `request_id` 的多条消息允许累加，但同一条消息只能计一次。M2 口径为 `total = prompt_tokens + completion_tokens`，`cached_tokens` 单独记录、暂不抵扣。
-5. 会话标题通过 `session_id` 关联 `chat_session` 获取；当前气泡模板暂未使用，后续需要项目/标题时再补。
+5. 会话标题通过 `session_id` 关联 `chat_session.session_title` 获取，截断 24 字后用于气泡；设置中可关闭。
 6. 数据库被占用时：复制 `local.db`、`-wal`、`-shm` 到临时目录后读取快照。
 7. 只查询 `chat_message`，不要遍历 `memory_common_embedding_*` 等依赖 `vec0` 扩展的表。
 8. Qoder CLI/桌面 App 可能只有 credits 没有 token，需要识别并把状态标为"仅 credits，无法统计 token"（M2 尚未实现）。
@@ -281,8 +282,9 @@ M2 实现状态（2026-11-02）：
    - `tool/call` → working
    - `turn/end` 的 `data.reason.kind`：`completed` → celebrate；`failed`/`error` → error；其他 → idle
 5. 如果应用在 turn 中途启动，先补算当前 turn 已产生的 usage，保证庆祝气泡的数据完整。
-6. 隐私：只读取事件类型、seq、usage、turn reason，不读取 `assistant/message` 正文。
+6. 隐私：只读取事件类型、seq、usage、turn reason 和 `session/title` 的标题，不读取 `assistant/message` 正文。
 7. 首次运行初始化所有已有会话的水位，避免回放历史；新出现的会话从 seq 0 开始处理。
+8. 标题从 `session/title` 事件的 `data.title` 提取，截断 24 字后用于气泡；设置中可关闭。
 
 M3 实现状态（2026-11-02）：
 

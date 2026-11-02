@@ -7,7 +7,9 @@ use std::time::{Duration, SystemTime};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 
-use crate::events::{is_paused, report_status, ActivityPayload, BubblePayload};
+use crate::events::{
+    include_task, is_paused, report_status, sanitize_task_title, ActivityPayload, BubblePayload,
+};
 
 const SOURCE: &str = "dsh";
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
@@ -174,8 +176,14 @@ fn poll_once(
 
             if max_seq > last_seq {
                 let (actions, new_seq) = actions_for_events(&events, last_seq);
+                let task = if include_task(app) {
+                    session_title(&events).and_then(|title| sanitize_task_title(&title))
+                } else {
+                    None
+                };
+
                 for action in actions {
-                    emit_action(app, action);
+                    emit_action(app, action, task.as_deref());
                 }
                 watermarks.files.insert(key, new_seq);
                 changed = true;
@@ -313,7 +321,17 @@ fn intensity_for(total: u64) -> f32 {
     (total as f32 / 1000.0).clamp(0.25, 1.0)
 }
 
-fn emit_action(app: &AppHandle, action: DshAction) {
+fn session_title(events: &[RawEvent]) -> Option<String> {
+    events
+        .iter()
+        .rev()
+        .find(|event| event.kind == "session/title")
+        .and_then(|event| event.data.get("title"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+fn emit_action(app: &AppHandle, action: DshAction, task: Option<&str>) {
     if is_paused(app) {
         return;
     }
@@ -336,6 +354,7 @@ fn emit_action(app: &AppHandle, action: DshAction) {
                         kind: "working",
                         tool: Some(SOURCE),
                         tokens: Some(tokens),
+                        task: task.map(str::to_string),
                     },
                 );
             }
@@ -356,6 +375,7 @@ fn emit_action(app: &AppHandle, action: DshAction) {
                     kind: "celebrate",
                     tool: Some(SOURCE),
                     tokens: Some(tokens),
+                    task: task.map(str::to_string),
                 },
             );
         }
@@ -375,6 +395,7 @@ fn emit_action(app: &AppHandle, action: DshAction) {
                     kind: "error",
                     tool: Some(SOURCE),
                     tokens: None,
+                    task: task.map(str::to_string),
                 },
             );
         }
@@ -514,6 +535,15 @@ mod tests {
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].seq, 1);
         assert_eq!(events[1].seq, 2);
+    }
+
+    #[test]
+    fn extracts_session_title() {
+        let events = parse_events(
+            r#"{"type":"session/title","seq":5,"data":{"title":"重构登录流程"}}"#,
+        );
+
+        assert_eq!(session_title(&events).as_deref(), Some("重构登录流程"));
     }
 
     #[test]

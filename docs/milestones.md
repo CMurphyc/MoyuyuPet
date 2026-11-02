@@ -15,11 +15,11 @@
 | 项目 | 内容 |
 | --- | --- |
 | 最后更新 | 2026-11-02 |
-| 当前里程碑 | M6 核心完成，待选择下一里程碑 |
-| 当前阶段 | 阶段三：日常可用（核心完成） |
+| 当前里程碑 | M7.1 完成，待选择下一步 |
+| 当前阶段 | 阶段四：体验增强（进行中） |
 | 基线提交 | `6086a23`（Tauri 骨架 + 文档 + .gitignore） |
-| 工作区 | M6 核心已完成；M6 代码待提交 |
-| 下一步动作 | 建议 M5 Codex 或 M6.1 设置增强 |
+| 工作区 | M7.1 已完成；代码待提交 |
+| 下一步动作 | M6.1 设置增强，或视觉/动画升级 |
 
 ## 2. 推进规则（给后续 session）
 
@@ -41,6 +41,7 @@
 | `NEXT` | 下一个开始 |
 | `TODO` | 未开始 |
 | `BLOCKED` | 被依赖或决策阻塞，必须写明原因 |
+| `HOLD` | 按用户指示暂缓，后续可恢复 |
 | `CUT` | 本期不做，需写明原因 |
 
 ## 3. 阶段与里程碑总览
@@ -62,10 +63,11 @@
 | M1 宠物外壳 | `DONE` | M0 | 透明窗口、五状态动画、假事件、气泡、点击穿透 | 假事件可驱动完整表现 |
 | M2 Qoder 适配器 | `DONE` | M1 事件模型 | 只读轮询、水位、去重 | 真实 token 1.5 秒内触发 |
 | M3 dsh 适配器 | `DONE` | M1 事件模型 | zstd 解析、事件映射 | turn/step 驱动工作与庆祝 |
-| M4 Claude Code 适配器 | `TODO` | M1、收件箱 | hook、transcript 解析 | hook 写入后可自动连接 |
-| M5 Codex 适配器 | `TODO` | M1 | SQLite / JSONL 双形态 | 至少一种形态可用 |
+| M4 Claude Code 适配器 | `HOLD` | M1、收件箱 | hook、transcript 解析 | 按用户指示暂缓 |
+| M5 Codex 适配器 | `HOLD` | M1 | SQLite / JSONL 双形态 | 按用户指示暂缓 |
 | M6 日常使用 | `DONE` | M1–M5 中已接入的适配器 | 设置、托盘、自启、单实例 | 清单全部通过 |
 | M6.1 设置增强与稳定性 | `TODO` | M6 | 路径/频率设置、日志、清理、soak | 延期的非阻塞项 |
+| M7.1 任务感知气泡 | `DONE` | M2/M3/M6 | 标题提取、模板、隐私开关 | 任务标题实际显示 |
 | M7 体验增强 | `TODO` | M6 | OTel、本地模型、Live2D、发布 | 按优先级逐项验收 |
 
 M2 与 M3 在 M1 的事件模型稳定后可以并行推进；M4 与 M5 可以并行。
@@ -237,7 +239,9 @@ pnpm tauri dev
 
 后续可选：写 dsh 插件直接投递 `inbox/`，文件适配器保留兜底。
 
-### M4 Claude Code 适配器（TODO）
+### M4 Claude Code 适配器（HOLD）
+
+> 2026-11-02 按用户指示暂缓，后续需要时恢复。
 
 目标：通过 hooks + transcript 接入 Claude Code。
 
@@ -264,7 +268,9 @@ pnpm tauri dev
 
 备注：当前开发机未安装 Claude Code，需要安装或使用 mock transcript 验证。
 
-### M5 Codex 适配器（TODO）
+### M5 Codex 适配器（HOLD）
+
+> 2026-11-02 按用户指示暂缓，后续需要时恢复。
 
 目标：兼容 Codex 的 SQLite 形态与 CLI JSONL 形态。
 
@@ -333,6 +339,32 @@ pnpm tauri dev
 - [ ] 退出与数据清理流程（水位、设置、日志）
 - [ ] 24 小时稳定性 + M1 延期的 30 分钟 soak
 - [ ] 手动验收暂停/自启开关与设置持久化
+
+### M7.1 任务感知气泡（DONE）
+
+目标：把 Qoder/dsh 的会话标题带入气泡，让吐槽围绕当前任务。
+
+任务清单：
+
+- [x] Qoder 读取 `chat_session.session_title`
+- [x] dsh 读取 `session/title` 事件的 `data.title`
+- [x] 标题清洗、截断到 24 字
+- [x] `BubblePayload` 增加 `task`，前端优先选择带 `{task}` 的模板
+- [x] 设置开关 `include_task`，持久化到 `preferences.json`
+- [x] 单元测试覆盖标题提取、截断与设置持久化（14 个 Rust 测试通过）
+
+验收标准：
+
+- [x] 临时 Qoder 会话标题“重构登录流程”实际显示在气泡中。
+- [x] 设置窗口显示“气泡包含任务标题”开关与隐私说明。
+- [x] 关闭开关时适配器不发送标题（代码路径 + Preferences 单测）。
+- [x] 不读取对话正文。
+
+当前验证（2026-11-02）：
+
+- 临时 Qoder 数据库联调：气泡显示“Qoder 在忙「重构登录流程」，我盯着呢”。
+- 设置窗口截图确认标题开关默认开启、隐私说明已更新。
+- 标题默认最多 24 字，可随时关闭。
 
 ### M7 体验增强（TODO）
 
@@ -408,6 +440,9 @@ cargo test --manifest-path src-tauri/Cargo.toml
 | 2026-11-02 | M3 | IN PROGRESS → DONE | - | 真实目录与临时会话联调通过；10 个 Rust 测试通过 |
 | 2026-11-02 | M6 | TODO → IN PROGRESS | - | 开始实现设置窗口、托盘与日常控制 |
 | 2026-11-02 | M6 | IN PROGRESS → DONE | - | 设置窗口、状态页、单实例通过；日志/清理/soak 显式移入 M6.1 |
+| 2026-11-02 | M4/M5 | TODO → HOLD | - | 按用户指示暂缓 Claude Code 与 Codex 适配 |
+| 2026-11-02 | M7.1 | TODO → IN PROGRESS | - | 开始任务感知气泡 |
+| 2026-11-02 | M7.1 | IN PROGRESS → DONE | - | Qoder/dsh 标题接入、截断、模板与设置开关通过 |
 
 后续 session 完成里程碑时，在本表追加一行，并更新第 1、3 节的状态。
 

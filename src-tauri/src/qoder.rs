@@ -7,7 +7,8 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 
 use crate::events::{
-    is_paused, report_status, ActivityPayload, BubblePayload, TokenUsage,
+    include_task, is_paused, report_status, sanitize_task_title, ActivityPayload, BubblePayload,
+    TokenUsage,
 };
 
 const SOURCE: &str = "qoder";
@@ -16,6 +17,12 @@ const NOT_FOUND_INTERVAL: Duration = Duration::from_secs(10);
 const ERROR_INTERVAL: Duration = Duration::from_secs(3);
 const BUSY_TIMEOUT: Duration = Duration::from_millis(250);
 const MAX_ROWS_PER_POLL: usize = 200;
+
+#[derive(Debug)]
+struct ChatMessage {
+    usage: TokenUsage,
+    session_id: Option<String>,
+}
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Watermark {
@@ -156,13 +163,24 @@ fn poll_once(app: &AppHandle, db_path: &Path, watermark_path: &Path) -> Result<(
         return Ok(());
     }
 
-    let (usages, new_rowid) = read_new_messages(&connection, last_rowid)?;
+    let (messages, new_rowid) = read_new_messages(&connection, last_rowid)?;
     if new_rowid > last_rowid {
         save_watermark(watermark_path, new_rowid)?;
     }
 
-    let total: u64 = usages.iter().map(|usage| usage.total()).sum();
+    let total: u64 = messages.iter().map(|message| message.usage.total()).sum();
     if total > 0 && !is_paused(app) {
+        let task = if include_task(app) {
+            messages
+                .iter()
+                .rev()
+                .find_map(|message| message.session_id.as_deref())
+                .and_then(|session_id| load_session_title(&connection, session_id))
+                .and_then(|title| sanitize_task_title(&title))
+        } else {
+            None
+        };
+
         let intensity = (total as f32 / 500.0).clamp(0.25, 1.0);
         let _ = app.emit(
             "pet://activity",
@@ -179,6 +197,7 @@ fn poll_once(app: &AppHandle, db_path: &Path, watermark_path: &Path) -> Result<(
                 kind: "working",
                 tool: Some("Qoder"),
                 tokens: Some(total),
+                task,
             },
         );
     }
@@ -244,9 +263,9 @@ fn save_watermark(path: &Path, last_rowid: i64) -> Result<(), PollError> {
 fn read_new_messages(
     connection: &Connection,
     after_rowid: i64,
-) -> Result<(Vec<TokenUsage>, i64), PollError> {
+) -> Result<(Vec<ChatMessage>, i64), PollError> {
     let mut statement = connection.prepare(
-        "SELECT rowid, token_info
+        "SELECT rowid, token_info, session_id
          FROM chat_message
          WHERE rowid > ?1
            AND role = 'assistant'
@@ -257,22 +276,37 @@ fn read_new_messages(
     )?;
 
     let rows = statement.query_map(params![after_rowid, MAX_ROWS_PER_POLL as i64], |row| {
-        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, Option<String>>(2)?,
+        ))
     })?;
 
-    let mut usages = Vec::new();
+    let mut messages = Vec::new();
     let mut new_rowid = after_rowid;
     for row in rows {
-        let (rowid, raw) = row?;
+        let (rowid, raw, session_id) = row?;
         if rowid > new_rowid {
             new_rowid = rowid;
         }
         if let Some(usage) = parse_token_info(&raw) {
-            usages.push(usage);
+            messages.push(ChatMessage { usage, session_id });
         }
     }
 
-    Ok((usages, new_rowid))
+    Ok((messages, new_rowid))
+}
+
+fn load_session_title(connection: &Connection, session_id: &str) -> Option<String> {
+    connection
+        .query_row(
+            "SELECT session_title FROM chat_session WHERE session_id = ?1",
+            params![session_id],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .ok()
+        .flatten()
 }
 
 fn parse_token_info(raw: &str) -> Option<TokenUsage> {
@@ -324,20 +358,38 @@ mod tests {
         let connection = Connection::open_in_memory().expect("in-memory db");
         connection
             .execute_batch(
-                "CREATE TABLE chat_message (id INTEGER PRIMARY KEY, role TEXT, token_info TEXT);
-                 INSERT INTO chat_message (role, token_info) VALUES ('user', '{\"prompt_tokens\":99}');
-                 INSERT INTO chat_message (role, token_info) VALUES ('assistant', '{\"prompt_tokens\":10,\"completion_tokens\":5}');
-                 INSERT INTO chat_message (role, token_info) VALUES ('assistant', NULL);
-                 INSERT INTO chat_message (role, token_info) VALUES ('assistant', '{\"prompt_tokens\":20,\"completion_tokens\":2}');",
+                "CREATE TABLE chat_message (id INTEGER PRIMARY KEY, role TEXT, token_info TEXT, session_id TEXT);
+                 INSERT INTO chat_message (role, token_info, session_id) VALUES ('user', '{\"prompt_tokens\":99}', 's1');
+                 INSERT INTO chat_message (role, token_info, session_id) VALUES ('assistant', '{\"prompt_tokens\":10,\"completion_tokens\":5}', 's1');
+                 INSERT INTO chat_message (role, token_info, session_id) VALUES ('assistant', NULL, 's1');
+                 INSERT INTO chat_message (role, token_info, session_id) VALUES ('assistant', '{\"prompt_tokens\":20,\"completion_tokens\":2}', 's1');",
             )
             .expect("fixture");
 
-        let (usages, new_rowid) = read_new_messages(&connection, 1).expect("rows");
+        let (messages, new_rowid) = read_new_messages(&connection, 1).expect("rows");
 
         assert_eq!(new_rowid, 4);
-        assert_eq!(usages.len(), 2);
-        assert_eq!(usages[0].total(), 15);
-        assert_eq!(usages[1].total(), 22);
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].usage.total(), 15);
+        assert_eq!(messages[0].session_id.as_deref(), Some("s1"));
+        assert_eq!(messages[1].usage.total(), 22);
+    }
+
+    #[test]
+    fn loads_session_title() {
+        let connection = Connection::open_in_memory().expect("in-memory db");
+        connection
+            .execute_batch(
+                "CREATE TABLE chat_session (session_id TEXT PRIMARY KEY, session_title TEXT);
+                 INSERT INTO chat_session (session_id, session_title) VALUES ('s1', '重构登录流程');",
+            )
+            .expect("fixture");
+
+        assert_eq!(
+            load_session_title(&connection, "s1").as_deref(),
+            Some("重构登录流程")
+        );
+        assert_eq!(load_session_title(&connection, "missing"), None);
     }
 
     #[test]
