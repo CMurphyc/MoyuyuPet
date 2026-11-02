@@ -7,17 +7,18 @@
 一个本地优先的 AI 桌宠：感知 Qoder、DeepSeek Harness、Claude Code、Codex 等工具的
 token 消耗与任务状态，用 2D 动画和少量评价气泡给出反馈。
 
-当前状态：M1 宠物外壳已完成；M2 Qoder 适配器已打通本地 SQLite → 动画/气泡链路，
-正在补充锁库和未安装场景的边界验收。
+当前状态：M1 宠物外壳、M2 Qoder 适配器、M3 dsh 适配器、M6 日常控制核心已完成；
+阶段一“本地 token → 动画/气泡”闭环已打通，开始支持设置窗口、托盘、暂停与单实例。
 
 ## 特性
 
 - 透明、置顶、可拖动的桌面宠物窗口
 - 根据 token 消耗速率驱动工作、庆祝、闲置等动画状态
-- 已接入 Qoder / Qoder CN 的本地 token 检测
+- 已接入 Qoder / Qoder CN 与 DeepSeek Harness 的本地 token 检测
 - 与任务相关的低频评价气泡，默认只使用元数据
+- 设置窗口、托盘控制、暂停、单实例与开机自启
 - 本地优先：不联网、不读对话正文、不上传数据
-- 适配器架构：后续接入 DeepSeek Harness、Claude Code、Codex
+- 适配器架构：后续接入 Claude Code、Codex
 
 ## 技术栈
 

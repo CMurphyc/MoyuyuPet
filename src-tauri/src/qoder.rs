@@ -6,7 +6,9 @@ use rusqlite::{params, Connection, OpenFlags};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 
-use crate::events::{ActivityPayload, AdapterStatusPayload, BubblePayload, TokenUsage};
+use crate::events::{
+    is_paused, report_status, ActivityPayload, BubblePayload, TokenUsage,
+};
 
 const SOURCE: &str = "qoder";
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
@@ -76,6 +78,7 @@ pub fn start(app: AppHandle, config_dir: PathBuf) {
             let Some(db_path) = find_database() else {
                 report_status(
                     &app,
+                    SOURCE,
                     "not_found",
                     "未检测到 Qoder 本地数据库",
                     &mut last_status,
@@ -86,15 +89,15 @@ pub fn start(app: AppHandle, config_dir: PathBuf) {
 
             match poll_once(&app, &db_path, &watermark_path) {
                 Ok(()) => {
-                    report_status(&app, "connected", "Qoder 已连接", &mut last_status);
+                    report_status(&app, SOURCE, "connected", "Qoder 已连接", &mut last_status);
                     std::thread::sleep(POLL_INTERVAL);
                 }
                 Err(PollError::Busy) => {
-                    report_status(&app, "busy", "Qoder 数据库忙，稍后重试", &mut last_status);
+                    report_status(&app, SOURCE, "busy", "Qoder 数据库忙，稍后重试", &mut last_status);
                     std::thread::sleep(ERROR_INTERVAL);
                 }
                 Err(PollError::Other(message)) => {
-                    report_status(&app, "error", &message, &mut last_status);
+                    report_status(&app, SOURCE, "error", &message, &mut last_status);
                     std::thread::sleep(ERROR_INTERVAL);
                 }
             }
@@ -123,29 +126,6 @@ fn find_database() -> Option<PathBuf> {
                 .join("local.db")
         })
         .find(|path| path.is_file())
-}
-
-fn report_status(
-    app: &AppHandle,
-    status: &'static str,
-    message: &str,
-    last_status: &mut String,
-) {
-    let key = format!("{status}|{message}");
-    if *last_status == key {
-        return;
-    }
-    *last_status = key;
-
-    eprintln!("[qoder] {message}");
-    let _ = app.emit(
-        "pet://adapter-status",
-        AdapterStatusPayload {
-            source: SOURCE,
-            status,
-            message: message.to_string(),
-        },
-    );
 }
 
 fn poll_once(app: &AppHandle, db_path: &Path, watermark_path: &Path) -> Result<(), PollError> {
@@ -182,7 +162,7 @@ fn poll_once(app: &AppHandle, db_path: &Path, watermark_path: &Path) -> Result<(
     }
 
     let total: u64 = usages.iter().map(|usage| usage.total()).sum();
-    if total > 0 {
+    if total > 0 && !is_paused(app) {
         let intensity = (total as f32 / 500.0).clamp(0.25, 1.0);
         let _ = app.emit(
             "pet://activity",

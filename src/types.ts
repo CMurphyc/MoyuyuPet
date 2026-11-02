@@ -14,3 +14,14 @@ export interface BubblePayload {
   tool?: string | null;
   tokens?: number | null;
 }
+
+export interface AdapterStatus {
+  source: string;
+  status: string;
+  message: string;
+}
+
+export interface AppSettings {
+  paused: boolean;
+  autostart: boolean;
+}

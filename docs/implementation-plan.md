@@ -270,18 +270,26 @@ M2 实现状态（2026-11-02）：
 - 已观察到的事件：`turn/start`、`turn/end`、`step/start`、`step/end`、`tool/call`、`tool/result`、`assistant/message`、`session/title`。
 - usage 字段：`data.usage.{inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens}`。
 
-实现：
+实现（M3 已落地）：
 
-1. 用 `notify` 监听 `~/.dsh/sessions` 下新增/修改的 `session.v4.jsonl.zstd`。
-2. 文件变化后做防抖，整体解压或用流式 zstd 解码，按行解析 JSON。
-3. 以每个文件的 `seq` 做去重；水位按会话文件保存。
+1. 轮询 `~/.dsh/sessions`（2 秒），对每个 `session.v4.jsonl.zstd` 用 mtime + size 判断是否变化；notify 防抖留到后续。
+2. 文件变化时整体 zstd 解压并按行解析 JSON；损坏行/半行跳过。
+3. 以每个文件的 `seq` 去重；水位按会话文件路径持久化到 `dsh-watermark.json`。
 4. 事件映射：
-   - `turn/start` → `TurnStarted`（标题取 `session/title` 或 `data.title`）
-   - `step/end` / `turn/end` 中的 usage → `TokensDelta`
-   - `tool/call` → `ToolCalled`
-   - `turn/end` → `TurnEnded`
-5. 解压失败/半行/追加写入中：保留上次成功水位，下次重试；不要清空已有统计。
-6. 隐私：只读取事件类型、usage、标题和工具名，不读取 `assistant/message` 正文。
+   - `turn/start` → working（低强度）
+   - `assistant/message` 的 `data.usage` → working + token 气泡
+   - `tool/call` → working
+   - `turn/end` 的 `data.reason.kind`：`completed` → celebrate；`failed`/`error` → error；其他 → idle
+5. 如果应用在 turn 中途启动，先补算当前 turn 已产生的 usage，保证庆祝气泡的数据完整。
+6. 隐私：只读取事件类型、seq、usage、turn reason，不读取 `assistant/message` 正文。
+7. 首次运行初始化所有已有会话的水位，避免回放历史；新出现的会话从 seq 0 开始处理。
+
+M3 实现状态（2026-11-02）：
+
+- 真实 dsh 目录 5 个会话水位初始化成功。
+- 临时会话 4 个事件处理完成，水位 seq 4，working 动画与气泡确认。
+- 5 个 dsh 单元测试 + 4 个 Qoder 单元测试全部通过。
+- 未采用 `notify` 和 dsh 插件，文件轮询适配器先行。
 
 后续增强：
 

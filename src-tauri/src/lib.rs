@@ -1,8 +1,9 @@
+mod commands;
+mod dsh;
 mod events;
 mod interaction;
 mod qoder;
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use tauri::{
@@ -11,12 +12,7 @@ use tauri::{
     AppHandle, Emitter, Manager, WindowEvent,
 };
 
-use crate::events::{ActivityPayload, BubblePayload};
-
-#[derive(Default)]
-struct PetState {
-    paused: AtomicBool,
-}
+use crate::events::{ActivityPayload, AdapterRegistry, BubblePayload, PetState};
 
 fn emit_demo(app: &AppHandle, kind: &str) {
     let (state, intensity, rate, bubble) = match kind {
@@ -67,8 +63,8 @@ fn emit_demo(app: &AppHandle, kind: &str) {
 
 fn toggle_pause(app: &AppHandle) {
     let state = app.state::<PetState>();
-    let paused = !state.paused.load(Ordering::Relaxed);
-    state.paused.store(paused, Ordering::Relaxed);
+    let paused = !state.is_paused();
+    state.set_paused(paused);
     let _ = app.emit("pet://paused", paused);
 }
 
@@ -111,6 +107,7 @@ fn schedule_position_clamp(window: tauri::WebviewWindow) {
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "显示 / 隐藏", true, None::<&str>)?;
     let pause = MenuItem::with_id(app, "pause", "暂停 / 恢复", true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
     let demo_working = MenuItem::with_id(app, "demo_working", "工作", true, None::<&str>)?;
     let demo_celebrate = MenuItem::with_id(app, "demo_celebrate", "庆祝", true, None::<&str>)?;
     let demo_error = MenuItem::with_id(app, "demo_error", "错误", true, None::<&str>)?;
@@ -130,7 +127,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         ],
     )?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &pause, &demo, &quit])?;
+    let menu = Menu::with_items(app, &[&show, &pause, &settings, &demo, &quit])?;
 
     let mut builder = TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
@@ -138,6 +135,9 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => toggle_visibility(app),
             "pause" => toggle_pause(app),
+            "settings" => {
+                let _ = commands::open_settings_window(app);
+            }
             "demo_working" => emit_demo(app, "working"),
             "demo_celebrate" => emit_demo(app, "celebrate"),
             "demo_error" => emit_demo(app, "error"),
@@ -158,8 +158,25 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("pet") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(PetState::default())
+        .manage(AdapterRegistry::default())
+        .invoke_handler(tauri::generate_handler![
+            commands::get_settings,
+            commands::set_paused,
+            commands::set_autostart,
+            commands::get_adapter_statuses,
+        ])
         .setup(|app| {
             setup_tray(app)?;
 
@@ -168,9 +185,16 @@ pub fn run() {
                     if let Err(error) = std::fs::create_dir_all(&config_dir) {
                         eprintln!("[app] failed to create config dir: {error}");
                     }
-                    qoder::start(app.handle().clone(), config_dir);
+                    qoder::start(app.handle().clone(), config_dir.clone());
+                    dsh::start(app.handle().clone(), config_dir);
                 }
                 Err(error) => eprintln!("[app] failed to resolve config dir: {error}"),
+            }
+
+            if std::env::var_os("MOYUYU_OPEN_SETTINGS").is_some() {
+                if let Err(error) = commands::open_settings_window(app.handle()) {
+                    eprintln!("[app] failed to open settings: {error}");
+                }
             }
 
             if let Some(window) = app.get_webview_window("pet") {
