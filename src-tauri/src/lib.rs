@@ -1,4 +1,6 @@
+mod events;
 mod interaction;
+mod qoder;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -9,24 +11,11 @@ use tauri::{
     AppHandle, Emitter, Manager, WindowEvent,
 };
 
+use crate::events::{ActivityPayload, BubblePayload};
+
 #[derive(Default)]
 struct PetState {
     paused: AtomicBool,
-}
-
-#[derive(Clone, serde::Serialize)]
-struct ActivityPayload {
-    state: &'static str,
-    intensity: f32,
-    token_rate: f64,
-    source: &'static str,
-}
-
-#[derive(Clone, serde::Serialize)]
-struct BubblePayload {
-    kind: &'static str,
-    tool: Option<&'static str>,
-    tokens: Option<u64>,
 }
 
 fn emit_demo(app: &AppHandle, kind: &str) {
@@ -173,6 +162,16 @@ pub fn run() {
         .manage(PetState::default())
         .setup(|app| {
             setup_tray(app)?;
+
+            match app.path().app_config_dir() {
+                Ok(config_dir) => {
+                    if let Err(error) = std::fs::create_dir_all(&config_dir) {
+                        eprintln!("[app] failed to create config dir: {error}");
+                    }
+                    qoder::start(app.handle().clone(), config_dir);
+                }
+                Err(error) => eprintln!("[app] failed to resolve config dir: {error}"),
+            }
 
             if let Some(window) = app.get_webview_window("pet") {
                 let _ = window.set_ignore_cursor_events(true);

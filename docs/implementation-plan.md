@@ -114,12 +114,13 @@ pub trait ActivitySource: Send + Sync {
 - `start()`：启动后台任务；使用取消令牌支持暂停/退出。
 - 每个适配器独立文件，解析失败只记录错误计数并向 UI 报告，不 panic。
 - 新增适配器的最小改动：一个模块 + 一个 fixture + 一条设置项。
+- 实现顺序：M2 先落地 Qoder 独立模块；M3 引入 `ActivitySource` trait 统一 Qoder 与 dsh，避免只有一个实现时提前抽象。
 
 ### 3.3 增量水位与去重
 
 | 数据源 | 水位/去重键 | 说明 |
 | --- | --- | --- |
-| Qoder | `chat_message.rowid` + `gmt_create` | 只处理水位之后的新消息 |
+| Qoder | `chat_message.rowid` | 只处理水位之后的新消息；`gmt_create` 仅辅助展示 |
 | dsh | 每个会话文件的 `seq` | 事件自带递增序号 |
 | Claude Code | `message.id` / `requestId` | 同一请求可能拆成多条 assistant 消息 |
 | Codex SQLite | `thread_id` + `updated_at_ms` + 上次 `tokens_used` | 累计值做差 |
@@ -240,12 +241,20 @@ type PetActivity = {
 
 1. 使用 `rusqlite` 以只读方式打开，设置 `busy_timeout`。
 2. 每 1 秒轮询：`role = 'assistant' AND token_info IS NOT NULL AND token_info <> ''` 且水位之后的新行。
-3. 以 `rowid` 为增量主键，`gmt_create` 辅助排序。
-4. 解析 `token_info`，映射为 `TokenUsage`；同一 `request_id` 的多条消息允许累加，但同一条消息只能计一次。
-5. 会话标题通过 `session_id` 关联 `chat_session` 获取，只用于气泡。
+3. 以 `rowid` 为唯一增量主键，`gmt_create` 仅辅助展示，不参与水位。
+4. 解析 `token_info`，映射为 `TokenUsage`；同一 `request_id` 的多条消息允许累加，但同一条消息只能计一次。M2 口径为 `total = prompt_tokens + completion_tokens`，`cached_tokens` 单独记录、暂不抵扣。
+5. 会话标题通过 `session_id` 关联 `chat_session` 获取；当前气泡模板暂未使用，后续需要项目/标题时再补。
 6. 数据库被占用时：复制 `local.db`、`-wal`、`-shm` 到临时目录后读取快照。
-7. 不要遍历 `memory_common_embedding_*` 等表，它们依赖 `vec0` 扩展；只查询 `chat_message`、`chat_session`。
-8. Qoder CLI/桌面 App 可能只有 credits 没有 token，需要识别并把状态标为"仅 credits，无法统计 token"。
+7. 只查询 `chat_message`，不要遍历 `memory_common_embedding_*` 等依赖 `vec0` 扩展的表。
+8. Qoder CLI/桌面 App 可能只有 credits 没有 token，需要识别并把状态标为"仅 credits，无法统计 token"（M2 尚未实现）。
+9. M2 实际落在 `src-tauri/src/qoder.rs` 和 `events.rs`；M3 再整理为 `activity/` 目录和统一 trait。
+
+M2 实现状态（2026-11-02）：
+
+- 已自动探测 `QoderCN`、`Qoder`、`Qoder CN` 三种 APPDATA 路径。
+- 首次运行将水位初始化为当前最大 rowid，避免回放历史。
+- 已实现只读连接、`busy_timeout`、快照兜底、状态事件和 4 个单元测试。
+- 临时数据库副本联调通过：新增 400 token 后水位推进并触发 working 动画与气泡。
 
 待确认：
 

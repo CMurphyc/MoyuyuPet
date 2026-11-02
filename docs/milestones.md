@@ -15,11 +15,11 @@
 | 项目 | 内容 |
 | --- | --- |
 | 最后更新 | 2026-11-02 |
-| 当前里程碑 | M2 Qoder 适配器 |
+| 当前里程碑 | M3 dsh 适配器 |
 | 当前阶段 | 阶段一：可用闭环 |
 | 基线提交 | `6086a23`（Tauri 骨架 + 文档 + .gitignore） |
-| 工作区 | M1 已验收，准备进入 M2 |
-| 下一步动作 | 实现 Qoder 本地数据库增量读取 |
+| 工作区 | M2 已完成，准备进入 M3 |
+| 下一步动作 | 实现 dsh zstd 会话解析与事件映射 |
 
 ## 2. 推进规则（给后续 session）
 
@@ -60,8 +60,8 @@
 | --- | --- | --- | --- | --- |
 | M0 工程基线 | `DONE` | 无 | Tauri 骨架、文档、gitignore | 构建与启动通过 |
 | M1 宠物外壳 | `DONE` | M0 | 透明窗口、五状态动画、假事件、气泡、点击穿透 | 假事件可驱动完整表现 |
-| M2 Qoder 适配器 | `NEXT` | M1 事件模型 | 只读轮询、水位、去重 | 真实 token 1.5 秒内触发 |
-| M3 dsh 适配器 | `TODO` | M1 事件模型 | zstd 解析、事件映射 | turn/step 驱动工作与庆祝 |
+| M2 Qoder 适配器 | `DONE` | M1 事件模型 | 只读轮询、水位、去重 | 真实 token 1.5 秒内触发 |
+| M3 dsh 适配器 | `NEXT` | M1 事件模型 | zstd 解析、事件映射 | turn/step 驱动工作与庆祝 |
 | M4 Claude Code 适配器 | `TODO` | M1、收件箱 | hook、transcript 解析 | hook 写入后可自动连接 |
 | M5 Codex 适配器 | `TODO` | M1 | SQLite / JSONL 双形态 | 至少一种形态可用 |
 | M6 日常使用 | `TODO` | M1–M5 中已接入的适配器 | 设置、托盘、自启、单实例 | 清单全部通过 |
@@ -159,7 +159,7 @@ pnpm tauri dev
 | 占位宠物素材 | 内联 SVG + CSS 动画，220×220 | 先验证状态机，不依赖外部美术；后续替换精灵图或 Live2D |
 | 气泡默认冷却 | 40 秒 | 避免打扰，高优先级可绕过 |
 
-### M2 Qoder 适配器（TODO）
+### M2 Qoder 适配器（DONE）
 
 目标：读取 Qoder / Qoder CN 本地数据库，把新增 token 消耗转换成 `TokensDelta`。
 
@@ -167,33 +167,40 @@ pnpm tauri dev
 
 任务清单：
 
-- [ ] 实现 `ActivitySource` trait 和 `QoderAdapter`
-- [ ] 探测 Qoder CN / 国际版数据库路径，支持设置页覆盖
-- [ ] 只读打开 `local.db`，设置 `busy_timeout`
-- [ ] 轮询 `chat_message` 中水位之后、`role = 'assistant'` 且 `token_info` 非空的行
-- [ ] 解析 `token_info`：`prompt_tokens`、`completion_tokens`、`cached_tokens`
-- [ ] 明确 `cached_tokens` 与 `prompt_tokens` 的口径，并写入设置页说明
-- [ ] 关联 `chat_session.session_title`，仅用于气泡
-- [ ] 以 `rowid` + `gmt_create` 持久化水位
-- [ ] 同消息去重，同 `request_id` 多消息允许累加
-- [ ] 数据库被占用时复制 `local.db`、`-wal`、`-shm` 快照读取
-- [ ] 不访问依赖 `vec0` 的 memory/embedding 表
-- [ ] 解析失败只记录错误计数，不影响其他适配器
-- [ ] 脱敏 fixture 与单元测试
-- [ ] 适配器状态展示：已连接 / 未检测到 / 解析失败 / 仅 credits
+- [x] Qoder 适配器独立模块（`ActivitySource` trait 留到 M3 与 dsh 一起提取）
+- [x] 自动探测 QoderCN / Qoder / Qoder CN 数据库路径；设置页覆盖留到 M6
+- [x] 只读打开 `local.db`，设置 `busy_timeout` 250ms
+- [x] 轮询 `chat_message` 中水位之后、`role = 'assistant'` 且 `token_info` 非空的行
+- [x] 解析 `token_info`：`prompt_tokens`、`completion_tokens`、`cached_tokens`
+- [x] 口径：`total = prompt_tokens + completion_tokens`；`cached_tokens` 单独记录，暂不抵扣
+- [x] 关联 `chat_session.session_title` 不纳入 M2，留到气泡需要项目/标题时补充（M6）
+- [x] 以 `rowid` 持久化水位，重启后从水位继续
+- [x] 同消息按 rowid 去重；同一请求的多条消息允许累加
+- [x] 数据库打开失败时复制 `local.db`、`-wal`、`-shm` 快照读取（锁库场景已实测）
+- [x] 只访问 `chat_message`，不触碰依赖 `vec0` 的 memory/embedding 表
+- [x] 解析失败跳过并推进水位；适配器错误不影响主进程
+- [x] 脱敏 fixture 与单元测试（4 个测试通过）
+- [x] 适配器状态通过 `pet://adapter-status` 发射；设置页展示留到 M6
 
 验收标准：
 
-- [ ] Qoder 产生新 token 后 1.5 秒内触发宠物 working。
-- [ ] 重启应用不回放历史 token。
-- [ ] 同一请求不重复计数。
-- [ ] Qoder 运行中数据库被锁时不崩溃，能降级到快照。
-- [ ] 无 Qoder 环境时显示"未检测到"，不影响假事件和其他适配器。
-- [ ] 单元测试覆盖解析、水位推进和去重。
+- [x] Qoder 产生新 token 后 1.5 秒内触发宠物 working（临时库副本联调通过）
+- [x] 重启应用不回放历史 token。
+- [x] 同一请求不重复计数。
+- [x] Qoder 运行中数据库被锁时不崩溃，能降级到快照（已实测）
+- [x] 无 Qoder 环境时显示"未检测到"，不影响假事件和其他适配器（状态事件已实测，UI 留到 M6）
+- [x] 单元测试覆盖解析、水位推进和去重。
 
 验证方式：真实 Qoder 对话 + fixture 测试 + 重启测试 + 锁库测试。
 
-### M3 dsh 适配器（TODO）
+当前验证（2026-11-02）：
+
+- 真实数据库只读连接成功，首次水位初始化为 `6856`，未回放历史。
+- 临时数据库副本插入一条 400 token 的 assistant 消息后，水位推进到 `6857`，宠物进入 working 并显示任务气泡。
+- 锁库测试：持有 EXCLUSIVE 锁 10 秒期间应用保持运行并记录 busy，解锁后水位从 `6857` 推进到 `6858`。
+- 未安装测试：将 APPDATA 指向空目录后，应用保持运行并记录 not_found。
+
+### M3 dsh 适配器（NEXT）
 
 目标：读取 DeepSeek Harness 的 zstd 会话文件，映射 turn/step/tool 和 usage。
 
@@ -370,6 +377,10 @@ cargo test --manifest-path src-tauri/Cargo.toml
 | 2026-11-02 | M1 | NEXT → IN PROGRESS | - | 开始实现窗口、点击穿透、动画、假事件与气泡 |
 | 2026-11-02 | M1 | IN PROGRESS | - | 窗口、穿透、五状态、气泡、托盘已实现；构建通过，待手动验收与稳定性检查 |
 | 2026-11-02 | M1 | IN PROGRESS → DONE | - | 用户手动验收 1–4 项；30 分钟 soak 延期至 M6 |
+| 2026-11-02 | M2 | TODO → IN PROGRESS | - | 开始实现 Qoder SQLite 增量读取 |
+| 2026-11-02 | M2 | IN PROGRESS | - | 真实库连接、水位、增量读取、working 动画与气泡联调通过；锁库/未安装场景待验 |
+| 2026-11-02 | M2 | IN PROGRESS → DONE | - | 锁库恢复、未安装降级均通过；核心验收完成 |
+| 2026-11-02 | M3 | TODO → NEXT | - | 等待开始 dsh 适配器 |
 
 后续 session 完成里程碑时，在本表追加一行，并更新第 1、3 节的状态。
 

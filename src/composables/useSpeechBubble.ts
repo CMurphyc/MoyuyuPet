@@ -28,7 +28,6 @@ export function useSpeechBubble(isPaused: () => boolean) {
   let lastShownAt = 0;
   let showTimer: number | undefined;
   let pumpTimer: number | undefined;
-  let welcomeTimer: number | undefined;
   const unlisteners: UnlistenFn[] = [];
 
   function render(template: string, vars: Record<string, string | number>) {
@@ -92,13 +91,11 @@ export function useSpeechBubble(isPaused: () => boolean) {
     );
 
     pumpTimer = window.setInterval(pump, 1000);
-    welcomeTimer = window.setTimeout(() => enqueue("idle"), 1500);
   });
 
   onUnmounted(() => {
     if (showTimer !== undefined) window.clearTimeout(showTimer);
     if (pumpTimer !== undefined) window.clearInterval(pumpTimer);
-    if (welcomeTimer !== undefined) window.clearTimeout(welcomeTimer);
     for (const unlisten of unlisteners) unlisten();
   });
 
