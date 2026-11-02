@@ -12,9 +12,19 @@
   "app": {
     "windows": [
       {
+        "label": "pet",
         "title": "MoyuyuPet",
-        "width": 800,
-        "height": 600
+        "width": 420,
+        "height": 420,
+        "center": true,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "focus": false,
+        "dragDropEnabled": false
       }
     ],
     "security": {
